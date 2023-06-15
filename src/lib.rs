@@ -86,6 +86,58 @@ where
 {
     fn to_bytes(&self, ctx: Ctx) -> [u8; N];
 }
+#[cfg(feature = "non_fixed")]
+impl<T> Read for Vec<T>
+where
+    T: Read,
+{
+    fn from_bytes(data: &mut impl ExactSizeIterator<Item = u8>) -> Result<Self, ParserError> {
+        Ok((0..).map_while(|_| T::from_bytes(data).ok()).collect()) // Create an infinte iterator, map until from_bytes returns an Error and collect.
+    }
+}
+
+#[cfg(feature = "non_fixed")]
+impl<T, Ctx> ReadCtx<Ctx> for Vec<T>
+where
+    T: ReadCtx<Ctx>,
+    Ctx: Clone,
+{
+    fn from_bytes(
+        data: &mut impl ExactSizeIterator<Item = u8>,
+        ctx: Ctx,
+    ) -> Result<Self, ParserError> {
+        Ok((0..)
+            .map_while(|_| T::from_bytes(data, ctx.clone()).ok())
+            .collect()) // Create an infinte iterator, map until from_bytes returns an Error and collect.
+    }
+}
+#[cfg(feature = "non_fixed")]
+impl<'a, T> Write<'a> for Vec<T>
+where
+    T: Write<'a>,
+{
+    fn to_bytes(&self) -> Cow<'a, [u8]> {
+        self.iter()
+            .map(T::to_bytes)
+            .collect::<Vec<Cow<[u8]>>>()
+            .concat()
+            .into()
+    }
+}
+#[cfg(feature = "non_fixed")]
+impl<'a, T, Ctx> WriteCtx<'a, Ctx> for Vec<T>
+where
+    T: WriteCtx<'a, Ctx>,
+    Ctx: Clone,
+{
+    fn to_bytes(&self, ctx: Ctx) -> Cow<'a, [u8]> {
+        self.iter()
+            .map(|x| T::to_bytes(x, ctx.clone()))
+            .collect::<Vec<Cow<[u8]>>>()
+            .concat()
+            .into()
+    }
+}
 #[macro_export]
 /// This macro allows turning enums into numbers and vice versa.
 /// ```
@@ -149,14 +201,17 @@ mod numeric_rw {
     }
     impl Read for i8 {
         fn from_bytes(data: &mut impl ExactSizeIterator<Item = u8>) -> Result<Self, ParserError> {
-            data.next().ok_or(ParserError::TooLittleData(1)).map(|x| x as i8)
+            data.next()
+                .ok_or(ParserError::TooLittleData(1))
+                .map(|x| x as i8)
         }
     }
     impl<'a> Write<'a> for u8 {
         fn to_bytes(&self) -> Cow<'a, [u8]> {
             Cow::Owned([*self].as_slice().to_owned())
         }
-    }impl<'a> Write<'a> for i8 {
+    }
+    impl<'a> Write<'a> for i8 {
         fn to_bytes(&self) -> Cow<'a, [u8]> {
             Cow::Owned([*self as u8].as_slice().to_owned())
         }
@@ -169,14 +224,20 @@ mod numeric_rw {
                     ctx: Endian,
                 ) -> Result<Self, ParserError> {
                     Ok(match ctx {
-                        Endian::Little => <$number_type>::from_le_bytes(
-                            data.next_chunk()
-                                .map_err(|x| ParserError::TooLittleData(core::mem::size_of::<$number_type>() - x.len()))?,
-                        ),
-                        Endian::Big => <$number_type>::from_be_bytes(
-                            data.next_chunk()
-                                .map_err(|x| ParserError::TooLittleData(core::mem::size_of::<$number_type>() - x.len()))?,
-                        ),
+                        Endian::Little => {
+                            <$number_type>::from_le_bytes(data.next_chunk().map_err(|x| {
+                                ParserError::TooLittleData(
+                                    core::mem::size_of::<$number_type>() - x.len(),
+                                )
+                            })?)
+                        }
+                        Endian::Big => {
+                            <$number_type>::from_be_bytes(data.next_chunk().map_err(|x| {
+                                ParserError::TooLittleData(
+                                    core::mem::size_of::<$number_type>() - x.len(),
+                                )
+                            })?)
+                        }
                     })
                 }
             }
@@ -184,8 +245,11 @@ mod numeric_rw {
                 fn to_bytes(&self, ctx: Endian) -> Cow<'a, [u8]> {
                     match ctx {
                         Endian::Little => self.to_le_bytes(),
-                        Endian::Big => self.to_be_bytes()
-                    }.as_slice().to_owned().into()
+                        Endian::Big => self.to_be_bytes(),
+                    }
+                    .as_slice()
+                    .to_owned()
+                    .into()
                 }
             }
         };
@@ -199,4 +263,5 @@ mod numeric_rw {
     impl_rw_numeric!(u128);
     impl_rw_numeric!(i128);
 }
+use alloc::vec::Vec;
 pub use numeric_rw::*;
