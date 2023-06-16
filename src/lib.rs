@@ -8,7 +8,7 @@ extern crate alloc;
 use core::fmt::Debug;
 
 #[cfg(feature = "non_fixed")]
-use alloc::borrow::Cow;
+use alloc::{borrow::Cow, vec::Vec};
 
 #[derive(Debug)]
 /// A generic error encountered while parsing.
@@ -263,5 +263,5 @@ mod numeric_rw {
     impl_rw_numeric!(u128);
     impl_rw_numeric!(i128);
 }
-use alloc::vec::Vec;
+#[cfg(feature = "numeric_rw")]
 pub use numeric_rw::*;

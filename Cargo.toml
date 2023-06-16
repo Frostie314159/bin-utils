@@ -10,7 +10,7 @@ repository = "https://github.com/Frostie314159/bin-utils"
 
 [features]
 non_fixed = []
-numeric_rw = []
+numeric_rw = ["non_fixed"]
 default = ["non_fixed", "numeric_rw"]
 
 [dependencies]
