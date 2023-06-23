@@ -194,28 +194,6 @@ macro_rules! enum_to_int {
 mod numeric_rw {
     use super::*;
     use alloc::borrow::ToOwned;
-    impl Read for u8 {
-        fn from_bytes(data: &mut impl ExactSizeIterator<Item = u8>) -> Result<Self, ParserError> {
-            data.next().ok_or(ParserError::TooLittleData(1))
-        }
-    }
-    impl Read for i8 {
-        fn from_bytes(data: &mut impl ExactSizeIterator<Item = u8>) -> Result<Self, ParserError> {
-            data.next()
-                .ok_or(ParserError::TooLittleData(1))
-                .map(|x| x as i8)
-        }
-    }
-    impl<'a> Write<'a> for u8 {
-        fn to_bytes(&self) -> Cow<'a, [u8]> {
-            Cow::Owned([*self].as_slice().to_owned())
-        }
-    }
-    impl<'a> Write<'a> for i8 {
-        fn to_bytes(&self) -> Cow<'a, [u8]> {
-            Cow::Owned([*self as u8].as_slice().to_owned())
-        }
-    }
     macro_rules! impl_rw_numeric {
         ($number_type:ty) => {
             impl ReadCtx<Endian> for $number_type {
@@ -254,6 +232,8 @@ mod numeric_rw {
             }
         };
     }
+    impl_rw_numeric!(u8);
+    impl_rw_numeric!(i8);
     impl_rw_numeric!(u16);
     impl_rw_numeric!(i16);
     impl_rw_numeric!(u32);
