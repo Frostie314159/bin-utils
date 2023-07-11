@@ -1,6 +1,6 @@
 [package]
 name = "bin-utils"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 description = "A bunch of utility macros and traits for binary parsers."
 authors = ["Frostie314159"]
@@ -14,3 +14,4 @@ numeric_rw = ["non_fixed"]
 default = ["non_fixed", "numeric_rw"]
 
 [dependencies]
+try_take = "0.1.0"

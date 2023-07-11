@@ -194,41 +194,56 @@ macro_rules! enum_to_int {
 #[cfg(feature = "numeric_rw")]
 mod numeric_rw {
     use super::*;
-    use alloc::borrow::ToOwned;
     macro_rules! impl_rw_numeric {
         ($number_type:ty) => {
+            impl ReadFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian> for $number_type {
+                fn from_bytes(
+                    data: &[u8; { ::core::mem::size_of::<$number_type>() }],
+                    ctx: Endian,
+                ) -> Result<Self, ParserError> {
+                    let function = match ctx {
+                        Endian::Little => <$number_type>::from_le_bytes,
+                        Endian::Big => <$number_type>::from_be_bytes,
+                    };
+                    Ok(function(*data))
+                }
+            }
+            #[cfg(feature = "non_fixed")]
             impl ReadCtx<Endian> for $number_type {
                 fn from_bytes(
                     data: &mut impl ExactSizeIterator<Item = u8>,
                     ctx: Endian,
                 ) -> Result<Self, ParserError> {
-                    Ok(match ctx {
-                        Endian::Little => {
-                            <$number_type>::from_le_bytes(data.next_chunk().map_err(|x| {
-                                ParserError::TooLittleData(
-                                    core::mem::size_of::<$number_type>() - x.len(),
-                                )
-                            })?)
-                        }
-                        Endian::Big => {
-                            <$number_type>::from_be_bytes(data.next_chunk().map_err(|x| {
-                                ParserError::TooLittleData(
-                                    core::mem::size_of::<$number_type>() - x.len(),
-                                )
-                            })?)
-                        }
-                    })
+                    let mut iter =
+                        ::try_take::try_take(data, { ::core::mem::size_of::<$number_type>() })
+                            .map_err(ParserError::TooLittleData)?;
+                    <$number_type as ReadFixedCtx<
+                        { ::core::mem::size_of::<$number_type>() },
+                        Endian,
+                    >>::from_bytes(&iter.next_chunk().unwrap(), ctx)
                 }
             }
+            impl WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian>
+                for $number_type
+            {
+                fn to_bytes(
+                    &self,
+                    ctx: Endian,
+                ) -> [u8; { ::core::mem::size_of::<$number_type>() }] {
+                    let function = match ctx {
+                        Endian::Little => <$number_type>::to_le_bytes,
+                        Endian::Big => <$number_type>::to_be_bytes,
+                    };
+                    function(*self)
+                }
+            }
+            #[cfg(feature = "non_fixed")]
             impl<'a> WriteCtx<'a, Endian> for $number_type {
                 fn to_bytes(&self, ctx: Endian) -> Cow<'a, [u8]> {
-                    match ctx {
-                        Endian::Little => self.to_le_bytes(),
-                        Endian::Big => self.to_be_bytes(),
-                    }
-                    .as_slice()
-                    .to_owned()
-                    .into()
+                    <Self as WriteFixedCtx<
+                                                { ::core::mem::size_of::<$number_type>() },
+                                                Endian,
+                                            >>::to_bytes(self, ctx).to_vec().into()
                 }
             }
         };
