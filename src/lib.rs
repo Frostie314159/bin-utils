@@ -24,6 +24,7 @@ pub enum ParserError {
 }
 
 /// Relevant for parsing numbers.
+#[derive(Debug)]
 pub enum Endian {
     Little,
     Big,
