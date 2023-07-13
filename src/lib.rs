@@ -1,5 +1,10 @@
-#![feature(more_qualified_paths)]
-#![feature(iter_next_chunk)]
+#![allow(incomplete_features)]
+#![feature(
+    more_qualified_paths,
+    iter_next_chunk,
+    generic_const_exprs,
+    iter_array_chunks
+)]
 #![no_std]
 
 #[cfg(feature = "non_fixed")]
@@ -21,6 +26,8 @@ pub enum ParserError {
     InvalidMagic,
     /// A value wasn't understood by the parser.
     ValueNotUnderstood,
+    /// While parsing an array, the parser errored earlier than expected.
+    ArrayTooShort,
 }
 
 /// Relevant for parsing numbers.
@@ -29,7 +36,10 @@ pub enum Endian {
     Little,
     Big,
 }
-
+/// A trait indicating, that a type only has one fixed size.
+pub trait StaticallySized {
+    const SIZE: usize;
+}
 #[cfg(feature = "non_fixed")]
 /// A trait for reading a non fixed amount of data.
 pub trait Read
@@ -131,6 +141,49 @@ where
         self.iter().flat_map(|x| x.to_bytes(ctx.clone())).collect()
     }
 }
+impl<const N: usize, T> ReadFixed<{ T::SIZE * N }> for [T; N]
+where
+    T: StaticallySized + ReadFixed<{ T::SIZE }> + Default + Copy,
+    [(); T::SIZE * N]:,
+{
+    fn from_bytes(data: &[u8; T::SIZE * N]) -> Result<Self, ParserError> {
+        let mut output = [T::default(); N];
+        for (i, x) in data
+            .iter()
+            .copied()
+            .array_chunks::<{ T::SIZE }>()
+            .map(|x| T::from_bytes(&x))
+            .enumerate()
+        {
+            output[i] = x?;
+        }
+        Ok(output)
+    }
+}
+impl<const N: usize, T> WriteFixed<{ T::SIZE * N }> for [T; N]
+where
+    T: StaticallySized + WriteFixed<{ T::SIZE }> + Default + Copy,
+    [(); T::SIZE * N]:,
+{
+    fn to_bytes(&self) -> [u8; T::SIZE * N] {
+        self.into_iter().flat_map(T::to_bytes).next_chunk().unwrap()
+    }
+}
+#[cfg(feature = "non_fixed")]
+impl<const N: usize, T: Read + Default + Copy> Read for [T; N] {
+    fn from_bytes(data: &mut impl ExactSizeIterator<Item = u8>) -> Result<Self, ParserError> {
+        (0..N)
+            .map_while(|_| T::from_bytes(data).ok())
+            .next_chunk()
+            .map_err(|_| ParserError::ArrayTooShort)
+    }
+}
+#[cfg(feature = "non_fixed")]
+impl<'a, const N: usize, T: Write> Write for [T; N] {
+    fn to_bytes(&self) -> Vec<u8> {
+        self.into_iter().flat_map(T::to_bytes).collect()
+    }
+}
 #[macro_export]
 /// This macro allows turning enums into numbers and vice versa.
 /// ```
@@ -188,6 +241,9 @@ mod numeric_rw {
     use super::*;
     macro_rules! impl_rw_numeric {
         ($number_type:ty) => {
+            impl StaticallySized for $number_type {
+                const SIZE: usize = { ::core::mem::size_of::<$number_type>() };
+            }
             impl ReadFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian> for $number_type {
                 fn from_bytes(
                     data: &[u8; { ::core::mem::size_of::<$number_type>() }],
@@ -230,12 +286,9 @@ mod numeric_rw {
                 }
             }
             #[cfg(feature = "non_fixed")]
-            impl<'a> WriteCtx<'a, Endian> for $number_type {
-                fn to_bytes(&self, ctx: Endian) -> Cow<'a, [u8]> {
-                    <Self as WriteFixedCtx<
-                                                { ::core::mem::size_of::<$number_type>() },
-                                                Endian,
-                                            >>::to_bytes(self, ctx).to_vec().into()
+            impl<'a> WriteCtx<Endian> for $number_type {
+                fn to_bytes(&self, ctx: Endian) -> ::alloc::vec::Vec<u8> {
+                    <Self as WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian,>>::to_bytes(self, ctx).to_vec()
                 }
             }
         };
