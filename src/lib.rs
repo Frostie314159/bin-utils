@@ -8,7 +8,7 @@ extern crate alloc;
 use core::fmt::Debug;
 
 #[cfg(feature = "non_fixed")]
-use alloc::{borrow::Cow, vec::Vec};
+use alloc::vec::Vec;
 
 #[derive(Debug)]
 /// A generic error encountered while parsing.
@@ -51,13 +51,13 @@ where
 }
 #[cfg(feature = "non_fixed")]
 /// A trait for writing data of variable length.
-pub trait Write<'a> {
-    fn to_bytes(&self) -> Cow<'a, [u8]>;
+pub trait Write {
+    fn to_bytes(&self) -> Vec<u8>;
 }
 #[cfg(feature = "non_fixed")]
 /// A trait for writing data of variable length, with context.
-pub trait WriteCtx<'a, Ctx> {
-    fn to_bytes(&self, ctx: Ctx) -> Cow<'a, [u8]>;
+pub trait WriteCtx<Ctx> {
+    fn to_bytes(&self, ctx: Ctx) -> Vec<u8>;
 }
 /// A trait for reading data of fixed length.
 pub trait ReadFixed<const N: usize>
@@ -113,30 +113,22 @@ where
     }
 }
 #[cfg(feature = "non_fixed")]
-impl<'a, T> Write<'a> for Vec<T>
+impl<'a, T> Write for Vec<T>
 where
-    T: Write<'a>,
+    T: Write,
 {
-    fn to_bytes(&self) -> Cow<'a, [u8]> {
-        self.iter()
-            .map(T::to_bytes)
-            .collect::<Vec<Cow<[u8]>>>()
-            .concat()
-            .into()
+    fn to_bytes(&self) -> Vec<u8> {
+        self.iter().flat_map(T::to_bytes).collect()
     }
 }
 #[cfg(feature = "non_fixed")]
-impl<'a, T, Ctx> WriteCtx<'a, Ctx> for Vec<T>
+impl<'a, T, Ctx> WriteCtx<Ctx> for Vec<T>
 where
-    T: WriteCtx<'a, Ctx>,
+    T: WriteCtx<Ctx>,
     Ctx: Clone,
 {
-    fn to_bytes(&self, ctx: Ctx) -> Cow<'a, [u8]> {
-        self.iter()
-            .map(|x| T::to_bytes(x, ctx.clone()))
-            .collect::<Vec<Cow<[u8]>>>()
-            .concat()
-            .into()
+    fn to_bytes(&self, ctx: Ctx) -> Vec<u8> {
+        self.iter().flat_map(|x| x.to_bytes(ctx.clone())).collect()
     }
 }
 #[macro_export]
