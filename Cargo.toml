@@ -1,6 +1,6 @@
 [package]
 name = "bin-utils"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2021"
 description = "A bunch of utility macros and traits for binary parsers."
 authors = ["Frostie314159"]
