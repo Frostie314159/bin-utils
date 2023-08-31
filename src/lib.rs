@@ -31,7 +31,7 @@ pub enum ParserError {
 }
 
 /// Relevant for parsing numbers.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub enum Endian {
     Little,
     Big,
@@ -244,12 +244,12 @@ mod numeric_rw {
             impl StaticallySized for $number_type {
                 const SIZE: usize = { ::core::mem::size_of::<$number_type>() };
             }
-            impl ReadFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian> for $number_type {
+            impl ReadFixedCtx<{ ::core::mem::size_of::<$number_type>() }, &Endian> for $number_type {
                 fn from_bytes(
                     data: &[u8; { ::core::mem::size_of::<$number_type>() }],
-                    ctx: Endian,
+                    ctx: &Endian,
                 ) -> Result<Self, ParserError> {
-                    let function = match ctx {
+                    let function = match *ctx {
                         Endian::Little => <$number_type>::from_le_bytes,
                         Endian::Big => <$number_type>::from_be_bytes,
                     };
@@ -257,28 +257,28 @@ mod numeric_rw {
                 }
             }
             #[cfg(feature = "non_fixed")]
-            impl ReadCtx<Endian> for $number_type {
+            impl ReadCtx<&Endian> for $number_type {
                 fn from_bytes(
                     data: &mut impl ExactSizeIterator<Item = u8>,
-                    ctx: Endian,
+                    ctx: &Endian,
                 ) -> Result<Self, ParserError> {
                     let mut iter =
                         ::try_take::try_take(data, { ::core::mem::size_of::<$number_type>() })
                             .map_err(ParserError::TooLittleData)?;
                     <$number_type as ReadFixedCtx<
                         { ::core::mem::size_of::<$number_type>() },
-                        Endian,
+                        &Endian,
                     >>::from_bytes(&iter.next_chunk().unwrap(), ctx)
                 }
             }
-            impl WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian>
+            impl WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, &Endian>
                 for $number_type
             {
                 fn to_bytes(
                     &self,
-                    ctx: Endian,
+                    ctx: &Endian,
                 ) -> [u8; { ::core::mem::size_of::<$number_type>() }] {
-                    let function = match ctx {
+                    let function = match *ctx {
                         Endian::Little => <$number_type>::to_le_bytes,
                         Endian::Big => <$number_type>::to_be_bytes,
                     };
@@ -286,9 +286,9 @@ mod numeric_rw {
                 }
             }
             #[cfg(feature = "non_fixed")]
-            impl<'a> WriteCtx<Endian> for $number_type {
-                fn to_bytes(&self, ctx: Endian) -> ::alloc::vec::Vec<u8> {
-                    <Self as WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, Endian,>>::to_bytes(self, ctx).to_vec()
+            impl<'a> WriteCtx<&Endian> for $number_type {
+                fn to_bytes(&self, ctx: &Endian) -> ::alloc::vec::Vec<u8> {
+                    <Self as WriteFixedCtx<{ ::core::mem::size_of::<$number_type>() }, &Endian>>::to_bytes(self, ctx).to_vec()
                 }
             }
         };
